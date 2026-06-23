@@ -27,6 +27,7 @@ export default function ChatInterface({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isFetchingOpening, setIsFetchingOpening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [currentDate, setCurrentDate] = useState<string>(
     initialDate || format(new Date(), "yyyy-MM-dd")
   );
@@ -126,7 +127,12 @@ export default function ChatInterface({
         }),
       });
 
-      if (!res.ok) return;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        setError(err.error || `Error ${res.status} — check Vercel function logs`);
+        return;
+      }
+      setError(null);
       const data = await res.json();
       const followUp = data.content as string;
       setPendingPrompt(followUp);
@@ -223,6 +229,11 @@ export default function ChatInterface({
           )}
         </div>
 
+        {error && (
+          <div className="mx-2 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-sm text-red-500">
+            {error}
+          </div>
+        )}
         <div ref={bottomRef} className="h-2" />
       </div>
 
