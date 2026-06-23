@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import OpenAI from "openai";
+import Groq from "groq-sdk";
 import { auth } from "@/lib/auth";
 
 const DAILY_PROMPTS = [
@@ -46,20 +46,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ content: getOpeningPrompt() });
     }
 
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OPENAI_API_KEY not set in Vercel env vars" }, { status: 500 });
+    if (!process.env.GROQ_API_KEY) {
+      return NextResponse.json({ error: "GROQ_API_KEY not set in Vercel env vars" }, { status: 500 });
     }
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+    const response = await groq.chat.completions.create({
+      model: "llama-3.1-8b-instant",
       max_tokens: 200,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         ...messages,
         {
-          role: "system",
-          content: "Based on what the user just shared, respond with genuine warmth and ask one follow-up question to help them go deeper. Keep it under 3 sentences total.",
+          role: "user",
+          content: "[Respond with warmth and one follow-up question to go deeper. 2-3 sentences max.]",
         },
       ],
     });

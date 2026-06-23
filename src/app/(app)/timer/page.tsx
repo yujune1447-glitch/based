@@ -8,10 +8,10 @@ import TimerCircle from "@/components/timer/TimerCircle";
 import TimeSelector from "@/components/timer/TimeSelector";
 import { playCompletionBell } from "@/lib/sounds";
 import { supabase } from "@/lib/supabase-client";
+import { usePersistedTimer } from "@/lib/usePersistedTimer";
 import { format } from "date-fns";
 
-const DEFAULT_MINUTES = 25;
-const HOLD_DURATION = 1000; // ms
+const HOLD_DURATION = 1000;
 
 function getGreeting(): string {
   const h = new Date().getHours();
@@ -24,26 +24,53 @@ export default function TimerPage() {
   const router = useRouter();
   const { data: session } = useSession();
 
-  const [selectedMinutes, setSelectedMinutes] = useState(DEFAULT_MINUTES);
-  const [timeRemaining, setTimeRemaining] = useState(DEFAULT_MINUTES * 60);
-  const [isRunning, setIsRunning] = useState(false);
   const [isComplete, setIsComplete] = useState(false);
   const [isPressingDown, setIsPressingDown] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [showSelector, setShowSelector] = useState(false);
   const [streak, setStreak] = useState(0);
 
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const holdIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
-  const startedAtRef = useRef<number | null>(null);
   const pressStartRef = useRef<number>(0);
+  const completingRef = useRef(false);
+
+  const handleComplete = useCallback(
+    async (completedSessionId: string | null) => {
+      if (completingRef.current) return;
+      completingRef.current = true;
+
+      setIsComplete(true);
+      playCompletionBell();
+
+      // Mark session complete in DB
+      if (completedSessionId && session?.user?.id) {
+        await supabase
+          .from("timer_sessions")
+          .update({ completed: true, actual_minutes: timer.selectedMinutes })
+          .eq("id", completedSessionId);
+
+        // Bump streak by 1 (only if not already counted today)
+        setStreak((prev) => prev + 1);
+      }
+
+      setTimeout(() => {
+        router.push(
+          completedSessionId
+            ? `/reflection?session=${completedSessionId}`
+            : "/reflection"
+        );
+      }, 2200);
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router, session]
+  );
+
+  const timer = usePersistedTimer(handleComplete);
 
   // Fetch streak on mount
   useEffect(() => {
     if (!session?.user?.id) return;
     const uid = session.user.id;
-
     async function fetchStreak() {
       const { data } = await supabase
         .from("timer_sessions")
@@ -54,100 +81,60 @@ export default function TimerPage() {
         .limit(90);
 
       if (!data) return;
-      const dates = new Set(data.map((s) => new Date(s.created_at).toDateString()));
+      // Deduplicate by day
+      const days = new Set(
+        data.map((s) => format(new Date(s.created_at), "yyyy-MM-dd"))
+      );
       let count = 0;
       const today = new Date();
       for (let i = 0; i < 90; i++) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        if (dates.has(d.toDateString())) {
-          count++;
-        } else {
-          break;
-        }
+        const d = format(
+          new Date(today.getFullYear(), today.getMonth(), today.getDate() - i),
+          "yyyy-MM-dd"
+        );
+        if (days.has(d)) count++;
+        else break;
       }
       setStreak(count);
     }
     fetchStreak();
   }, [session]);
 
-  // Sync timeRemaining when duration changes (and timer idle)
+  // Sync timeRemaining when minutes change (idle)
   useEffect(() => {
-    if (!isRunning && !isComplete) {
-      setTimeRemaining(selectedMinutes * 60);
+    if (!timer.isRunning && !isComplete) {
+      timer.setTimeRemaining(timer.selectedMinutes * 60);
     }
-  }, [selectedMinutes, isRunning, isComplete]);
+  }, [timer.selectedMinutes]); // eslint-disable-line
 
   const startTimer = useCallback(async () => {
-    if (isRunning || isComplete) return;
+    if (timer.isRunning || isComplete) return;
 
+    let newSessionId: string | null = null;
     if (session?.user?.id) {
       const { data } = await supabase
         .from("timer_sessions")
         .insert({
           user_id: session.user.id,
-          planned_minutes: selectedMinutes,
+          planned_minutes: timer.selectedMinutes,
           actual_minutes: 0,
           completed: false,
         })
         .select("id")
         .single();
-      if (data) sessionIdRef.current = data.id;
+      if (data) newSessionId = data.id;
     }
 
-    startedAtRef.current = Date.now();
-    setIsRunning(true);
     setIsPressingDown(false);
     setHoldProgress(0);
-  }, [isRunning, isComplete, session, selectedMinutes]);
-
-  const handleTimerComplete = useCallback(async () => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    setIsRunning(false);
-    setIsComplete(true);
-    playCompletionBell();
-
-    const actualMinutes = Math.round(
-      (Date.now() - (startedAtRef.current ?? Date.now())) / 60000
-    );
-
-    if (sessionIdRef.current && session?.user?.id) {
-      await supabase
-        .from("timer_sessions")
-        .update({ completed: true, actual_minutes: actualMinutes })
-        .eq("id", sessionIdRef.current);
-    }
-
-    setTimeout(() => {
-      const id = sessionIdRef.current;
-      router.push(id ? `/reflection?session=${id}` : "/reflection");
-    }, 2200);
-  }, [router, session]);
-
-  // Timer tick
-  useEffect(() => {
-    if (!isRunning) return;
-    intervalRef.current = setInterval(() => {
-      setTimeRemaining((prev) => {
-        if (prev <= 1) {
-          handleTimerComplete();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning, handleTimerComplete]);
+    timer.start(timer.selectedMinutes, newSessionId);
+  }, [timer, isComplete, session]);
 
   // Hold progress animation
   const startHoldProgress = useCallback(() => {
     pressStartRef.current = Date.now();
-    setHoldProgress(0);
     holdIntervalRef.current = setInterval(() => {
-      const elapsed = Date.now() - pressStartRef.current;
-      const p = Math.min(elapsed / HOLD_DURATION, 1);
+      const p = Math.min((Date.now() - pressStartRef.current) / HOLD_DURATION, 1);
       setHoldProgress(p);
     }, 16);
   }, []);
@@ -165,7 +152,7 @@ export default function TimerPage() {
     {
       threshold: HOLD_DURATION,
       onStart: () => {
-        if (isRunning || isComplete) return;
+        if (timer.isRunning || isComplete) return;
         setIsPressingDown(true);
         startHoldProgress();
       },
@@ -181,19 +168,19 @@ export default function TimerPage() {
   );
 
   const handleTap = () => {
-    if (isRunning || isComplete || isPressingDown) return;
+    if (timer.isRunning || isComplete || isPressingDown) return;
     setShowSelector(true);
   };
 
-  const progress = timeRemaining / (selectedMinutes * 60);
-  const todayLabel = format(new Date(), "EEEE, MMMM d");
+  const progress = timer.isRunning || isComplete
+    ? timer.timeRemaining / (timer.selectedMinutes * 60)
+    : 1;
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* Header */}
       <div className="flex flex-col items-center pt-10 pb-2 px-6">
         <p className="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">
-          {todayLabel}
+          {format(new Date(), "EEEE, MMMM d")}
         </p>
         <h1 className="text-[22px] font-semibold text-slate-700 mt-1">
           {getGreeting()}
@@ -201,13 +188,12 @@ export default function TimerPage() {
         </h1>
       </div>
 
-      {/* Timer — centered in remaining space */}
       <div className="flex-1 flex items-center justify-center px-6">
         <TimerCircle
           progress={progress}
-          timeRemaining={timeRemaining}
-          totalSeconds={selectedMinutes * 60}
-          isRunning={isRunning}
+          timeRemaining={timer.timeRemaining}
+          totalSeconds={timer.selectedMinutes * 60}
+          isRunning={timer.isRunning}
           isComplete={isComplete}
           isPressingDown={isPressingDown}
           holdProgress={holdProgress}
@@ -218,13 +204,12 @@ export default function TimerPage() {
         />
       </div>
 
-      {/* Time selector sheet */}
-      {showSelector && !isRunning && !isComplete && (
+      {showSelector && !timer.isRunning && !isComplete && (
         <TimeSelector
-          selectedMinutes={selectedMinutes}
+          selectedMinutes={timer.selectedMinutes}
           onSelect={(m) => {
-            setSelectedMinutes(m);
-            setTimeRemaining(m * 60);
+            timer.setSelectedMinutes(m);
+            timer.setTimeRemaining(m * 60);
           }}
           onClose={() => setShowSelector(false)}
         />
