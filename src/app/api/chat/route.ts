@@ -34,34 +34,40 @@ Your role:
 Your tone is like a wise, caring spiritual director — curious, unhurried, full of warmth.`;
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: "Unauthorized — not logged in" }, { status: 401 });
+    }
+
+    const { messages, type } = await req.json();
+
+    if (type === "opening") {
+      return NextResponse.json({ content: getOpeningPrompt() });
+    }
+
+    if (!process.env.OPENAI_API_KEY) {
+      return NextResponse.json({ error: "OPENAI_API_KEY not set in Vercel env vars" }, { status: 500 });
+    }
+
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 200,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        ...messages,
+        {
+          role: "system",
+          content: "Based on what the user just shared, respond with genuine warmth and ask one follow-up question to help them go deeper. Keep it under 3 sentences total.",
+        },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content ?? "";
+    return NextResponse.json({ content });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
-
-  const { messages, type } = await req.json();
-
-  if (type === "opening") {
-    const question = getOpeningPrompt();
-    return NextResponse.json({ content: question });
-  }
-
-  // Follow-up response
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 200,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...messages,
-      {
-        role: "system",
-        content:
-          "Based on what the user just shared, respond with genuine warmth and ask one follow-up question to help them go deeper. Keep it under 3 sentences total.",
-      },
-    ],
-  });
-
-  const content = response.choices[0]?.message?.content ?? "";
-  return NextResponse.json({ content });
 }
