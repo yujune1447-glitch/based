@@ -100,12 +100,6 @@ export default function TimerPage() {
     fetchStreak();
   }, [session]);
 
-  // Sync timeRemaining when minutes change (idle)
-  useEffect(() => {
-    if (!timer.isRunning && !isComplete) {
-      timer.setTimeRemaining(timer.selectedMinutes * 60);
-    }
-  }, [timer.selectedMinutes]); // eslint-disable-line
 
   const startTimer = useCallback(async () => {
     if (timer.isRunning || isComplete) return;

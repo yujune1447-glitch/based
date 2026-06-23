@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
-const DURATIONS = [5, 10, 15, 20, 25, 30];
+const ITEM_H = 52;
+
+// Generate minutes list: 1-9, then 10, 15, 20... up to 120
+const MINUTES = [
+  ...Array.from({ length: 9 }, (_, i) => i + 1),
+  10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55,
+  60, 75, 90, 105, 120,
+];
 
 interface TimeSelectorProps {
   selectedMinutes: number;
@@ -11,21 +18,31 @@ interface TimeSelectorProps {
   onClose: () => void;
 }
 
-export default function TimeSelector({
-  selectedMinutes,
-  onSelect,
-  onClose,
-}: TimeSelectorProps) {
-  const [customValue, setCustomValue] = useState("");
-  const [customError, setCustomError] = useState(false);
+export default function TimeSelector({ selectedMinutes, onSelect, onClose }: TimeSelectorProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const initialIndex = Math.max(0, MINUTES.indexOf(
+    MINUTES.reduce((prev, curr) =>
+      Math.abs(curr - selectedMinutes) < Math.abs(prev - selectedMinutes) ? curr : prev
+    )
+  ));
+  const [selectedIndex, setSelectedIndex] = useState(initialIndex);
 
-  const handleCustomSubmit = () => {
-    const n = parseInt(customValue, 10);
-    if (!n || n < 1 || n > 180) {
-      setCustomError(true);
-      return;
-    }
-    onSelect(n);
+  // Scroll to selected on open
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = initialIndex * ITEM_H;
+  }, []); // eslint-disable-line
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const idx = Math.round(el.scrollTop / ITEM_H);
+    setSelectedIndex(Math.max(0, Math.min(idx, MINUTES.length - 1)));
+  };
+
+  const handleConfirm = () => {
+    onSelect(MINUTES[selectedIndex]);
     onClose();
   };
 
@@ -36,86 +53,72 @@ export default function TimeSelector({
         className="fixed bottom-0 left-0 right-0 z-50 bg-white rounded-t-3xl fade-in"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex justify-center pt-3 pb-1">
+        <div className="flex justify-center pt-3">
           <div className="w-10 h-1 bg-slate-200 rounded-full" />
         </div>
 
-        <div className="px-6 pb-2">
+        <div className="flex items-center justify-between px-6 pt-3 pb-1">
           <h2 className="text-lg font-semibold text-slate-800">Set timer</h2>
-          <p className="text-sm text-slate-400 mt-0.5">How long would you like to pray?</p>
+          <button onClick={onClose} className="text-sm text-slate-400 active:text-slate-600">Cancel</button>
         </div>
 
-        {/* Preset grid */}
-        <div className="grid grid-cols-3 gap-3 px-6 py-4">
-          {DURATIONS.map((minutes) => (
-            <button
-              key={minutes}
-              onClick={() => { onSelect(minutes); onClose(); }}
-              className={cn(
-                "flex flex-col items-center justify-center h-20 rounded-2xl border transition-all duration-150 active:scale-95",
-                selectedMinutes === minutes
-                  ? "border-sky-400 bg-sky-50"
-                  : "border-slate-100 bg-slate-50 active:bg-slate-100"
-              )}
-            >
-              <span className={cn(
-                "text-3xl font-light tabular-nums",
-                selectedMinutes === minutes ? "text-sky-600" : "text-slate-700"
-              )}>
-                {minutes}
-              </span>
-              <span className={cn(
-                "text-xs font-medium mt-0.5",
-                selectedMinutes === minutes ? "text-sky-500" : "text-slate-400"
-              )}>
-                min
-              </span>
-              {selectedMinutes === minutes && (
-                <span className="absolute top-2 right-2 text-sky-400 text-xs">✓</span>
-              )}
-            </button>
-          ))}
-        </div>
+        {/* Wheel */}
+        <div className="relative mx-6 my-4" style={{ height: ITEM_H * 5 }}>
+          {/* Selection highlight */}
+          <div
+            className="absolute left-0 right-0 rounded-2xl bg-sky-50 border border-sky-100 pointer-events-none z-10"
+            style={{ top: ITEM_H * 2, height: ITEM_H }}
+          />
 
-        {/* Custom duration */}
-        <div className="px-6 pb-8 flex flex-col gap-3">
-          <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">
-              Custom duration
-            </p>
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min={1}
-                max={180}
-                value={customValue}
-                onChange={(e) => { setCustomValue(e.target.value); setCustomError(false); }}
-                onKeyDown={(e) => e.key === "Enter" && handleCustomSubmit()}
-                placeholder="e.g. 45"
-                className={cn(
-                  "flex-1 h-12 px-4 rounded-2xl bg-slate-50 border text-[15px] text-slate-800 outline-none",
-                  "placeholder:text-slate-300 transition-colors",
-                  customError ? "border-red-200" : "border-slate-100 focus:border-sky-200"
-                )}
-              />
-              <span className="flex items-center text-sm text-slate-400 font-medium px-1">min</span>
-              <button
-                onClick={handleCustomSubmit}
-                className="h-12 px-5 rounded-2xl bg-sky-500 text-white text-sm font-medium active:bg-sky-600 transition-colors"
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="h-full overflow-y-scroll no-scrollbar"
+            style={{ scrollSnapType: "y mandatory" }}
+          >
+            {/* Top padding */}
+            <div style={{ height: ITEM_H * 2 }} />
+
+            {MINUTES.map((m, i) => (
+              <div
+                key={m}
+                style={{ scrollSnapAlign: "center", height: ITEM_H }}
+                className="flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => {
+                  setSelectedIndex(i);
+                  scrollRef.current!.scrollTo({ top: i * ITEM_H, behavior: "smooth" });
+                }}
               >
-                Set
-              </button>
-            </div>
-            {customError && (
-              <p className="text-xs text-red-400 mt-1 px-1">Enter a number between 1 and 180</p>
-            )}
+                <span className={cn(
+                  "text-3xl font-light tabular-nums transition-all",
+                  i === selectedIndex ? "text-sky-600 font-medium" : "text-slate-400"
+                )}>
+                  {m}
+                </span>
+                <span className={cn(
+                  "text-base transition-all",
+                  i === selectedIndex ? "text-sky-400" : "text-slate-300"
+                )}>
+                  min
+                </span>
+              </div>
+            ))}
+
+            {/* Bottom padding */}
+            <div style={{ height: ITEM_H * 2 }} />
           </div>
 
+          {/* Fade top/bottom */}
+          <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-white to-transparent pointer-events-none z-10" />
+          <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none z-10" />
+        </div>
+
+        <div className="px-6 pb-6">
           <button
-            onClick={onClose}
-            className="w-full h-11 rounded-2xl bg-slate-50 text-slate-400 text-sm font-medium active:bg-slate-100"
+            onClick={handleConfirm}
+            className="w-full h-14 rounded-2xl bg-sky-500 text-white text-[15px] font-semibold active:bg-sky-600 transition-colors"
           >
-            Cancel
+            Set {MINUTES[selectedIndex]} minutes
           </button>
         </div>
       </div>

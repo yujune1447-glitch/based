@@ -56,13 +56,13 @@ export default function ChatInterface({
     setMessages(msgs);
   }, [initialEntries]);
 
-  // Fetch opening question if coming from timer and no entries yet
+  // Fetch opening question whenever chat is empty (timer session or free journal)
   useEffect(() => {
-    if (timerSessionId && initialEntries.length === 0) {
+    if (initialEntries.length === 0) {
       fetchOpeningQuestion();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timerSessionId]);
+  }, []);
 
   const fetchOpeningQuestion = useCallback(async () => {
     setIsFetchingOpening(true);
