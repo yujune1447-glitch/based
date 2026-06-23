@@ -60,7 +60,7 @@ export default async function ReflectionPage({ searchParams }: Props) {
   }
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-h-0">
       <ChatInterface
         initialEntries={initialEntries}
         allDays={allDays}

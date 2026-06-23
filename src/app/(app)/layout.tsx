@@ -13,7 +13,7 @@ export default async function AppLayout({
     <SessionProvider session={session}>
       <div className="flex flex-col h-full bg-white">
         {/* Main content area, leaves room for bottom nav + safe area */}
-        <main className="flex-1 overflow-hidden" style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
+        <main className="flex-1 min-h-0 overflow-hidden" style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}>
           {children}
         </main>
         <BottomNav />

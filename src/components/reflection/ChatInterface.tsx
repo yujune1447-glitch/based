@@ -87,7 +87,9 @@ export default function ChatInterface({
   }, [timerSessionId]);
 
   const scrollToBottom = useCallback(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setTimeout(() => {
+      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    }, 50);
   }, []);
 
   useEffect(() => {
@@ -157,7 +159,7 @@ export default function ChatInterface({
   const todayLabel = format(new Date(currentDate + "T12:00:00"), "EEEE, MMMM d");
 
   return (
-    <div className="flex flex-col h-full" {...swipeHandlers}>
+    <div className="flex flex-col h-full min-h-0" {...swipeHandlers}>
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 bg-white">
         <button
