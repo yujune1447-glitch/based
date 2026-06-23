@@ -1,0 +1,22 @@
+{
+  "name": "based — daily accountability",
+  "short_name": "based",
+  "description": "Faith-based daily prayer, reflection, and accountability.",
+  "start_url": "/timer",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
