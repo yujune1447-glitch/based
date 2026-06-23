@@ -2,8 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { auth } from "@/lib/auth";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 const DAILY_PROMPTS = [
   "What moment today reminded you of God's faithfulness?",
   "Where did you feel the most peaceful today, and what do you think God was saying to you in that?",
@@ -49,6 +47,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Follow-up response
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const response = await openai.chat.completions.create({
     model: "gpt-4o",
     max_tokens: 200,
